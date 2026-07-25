@@ -21,7 +21,9 @@ package basic
 
 import (
 	"context"
+	cryptorand "crypto/rand"
 	"embed"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -31,10 +33,10 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/apache/answer-plugins/connector-basic/i18n"
 	"github.com/apache/answer-plugins/util"
 	"github.com/apache/answer/pkg/checker"
 	"github.com/apache/answer/plugin"
+	"github.com/ngineer420/answer-plugins/connector-basic/i18n"
 	"github.com/segmentfault/pacman/log"
 	"github.com/tidwall/gjson"
 	"golang.org/x/oauth2"
@@ -70,7 +72,15 @@ type ConnectorConfig struct {
 
 	Scope   string `json:"scope"`
 	LogoSVG string `json:"logo_svg"`
+
+	// PseudonymPrefix is used to build a handle when the provider's username
+	// and display name are deliberately left unmapped. See pseudonymise.
+	PseudonymPrefix string `json:"pseudonym_prefix"`
 }
+
+// defaultPseudonymPrefix is used when a pseudonym is needed but no prefix was
+// configured.
+const defaultPseudonymPrefix = "user"
 
 var base64chars = strings.Split("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_", "")
 
@@ -204,9 +214,52 @@ func (g *Connector) ConnectorReceiver(ctx *plugin.GinContext, receiverURL string
 	return userInfo, nil
 }
 
+// pseudonymise supplies a generated handle when the provider's username or
+// display name were not mapped.
+//
+// Leaving those paths unmapped is a legitimate privacy choice: on a community
+// where members should not be identified by the real name on their Google or
+// GitHub account, importing that name publishes it as their handle, their
+// display name and their author byline. But unmapped values are not handled
+// gracefully further down:
+//
+//   - An empty username reaches the padding below as "" and becomes "____", so
+//     every such member collides on one handle instead of getting Answer's
+//     random fallback.
+//   - An empty display name renders blank in the UI and emits
+//     "author":{"name":""} in the QAPage structured data, which degrades the
+//     markup search engines rely on.
+//
+// So an unmapped path produces "<prefix>-<random>" instead, and the member can
+// rename themselves afterwards. Providers that DO map these keep their values.
+func (g *Connector) pseudonymise(userInfo plugin.ExternalLoginUserInfo) plugin.ExternalLoginUserInfo {
+	if len(userInfo.Username) == 0 {
+		prefix := strings.TrimSpace(g.Config.PseudonymPrefix)
+		if len(prefix) == 0 {
+			prefix = defaultPseudonymPrefix
+		}
+		userInfo.Username = fmt.Sprintf("%s-%s", prefix, randomHandleSuffix())
+	}
+	if len(userInfo.DisplayName) == 0 {
+		userInfo.DisplayName = userInfo.Username
+	}
+	return userInfo
+}
+
+// randomHandleSuffix returns 6 hex characters. Uniqueness is what matters here
+// rather than unpredictability -- Answer still enforces username uniqueness --
+// but crypto/rand is used anyway so handles cannot be guessed in sequence.
+func randomHandleSuffix() string {
+	b := make([]byte, 3)
+	if _, err := cryptorand.Read(b); err != nil {
+		return fmt.Sprintf("%06x", rand.Int31n(0xffffff))
+	}
+	return hex.EncodeToString(b)
+}
+
 func (g *Connector) formatUserInfo(userInfo plugin.ExternalLoginUserInfo) (
 	userInfoFormatted plugin.ExternalLoginUserInfo) {
-	userInfoFormatted = userInfo
+	userInfoFormatted = g.pseudonymise(userInfo)
 	if checker.IsInvalidUsername(userInfoFormatted.Username) {
 		userInfoFormatted.Username = replaceUsernameReg.ReplaceAllString(userInfoFormatted.Username, "_")
 	}
@@ -242,6 +295,8 @@ func (g *Connector) ConfigFields() []plugin.ConfigField {
 		i18n.ConfigUserUsernameJsonPathTitle, i18n.ConfigUserUsernameJsonPathDescription, g.Config.UserUsernameJsonPath, false))
 	fields = append(fields, createTextInput("user_email_json_path",
 		i18n.ConfigUserEmailJsonPathTitle, i18n.ConfigUserEmailJsonPathDescription, g.Config.UserEmailJsonPath, false))
+	fields = append(fields, createTextInput("pseudonym_prefix",
+		i18n.ConfigPseudonymPrefixTitle, i18n.ConfigPseudonymPrefixDescription, g.Config.PseudonymPrefix, false))
 	fields = append(fields, createTextInput("user_avatar_json_path",
 		i18n.ConfigUserAvatarJsonPathTitle, i18n.ConfigUserAvatarJsonPathDescription, g.Config.UserAvatarJsonPath, false))
 	fields = append(fields, plugin.ConfigField{

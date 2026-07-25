@@ -76,6 +76,11 @@ plugin:
             other: User Email JSON Path
           description:
             other: "Path in the OAuth2 User JSON to the user email. eg: user.email"
+        pseudonym_prefix:
+          title:
+            other: Pseudonym Prefix
+          description:
+            other: "Used only when the username and display name paths are left unmapped, which keeps the provider's real name out of the community. Generates a handle like 'grower-a4f2c1'. Defaults to 'user'."
         user_avatar_json_path:
           title:
             other: User Avatar JSON Path

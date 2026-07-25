@@ -43,6 +43,8 @@ const (
 	ConfigUserUsernameJsonPathDescription    = "plugin.basic_connector.backend.config.user_username_json_path.description"
 	ConfigUserEmailJsonPathTitle             = "plugin.basic_connector.backend.config.user_email_json_path.title"
 	ConfigUserEmailJsonPathDescription       = "plugin.basic_connector.backend.config.user_email_json_path.description"
+	ConfigPseudonymPrefixTitle               = "plugin.basic_connector.backend.config.pseudonym_prefix.title"
+	ConfigPseudonymPrefixDescription         = "plugin.basic_connector.backend.config.pseudonym_prefix.description"
 	ConfigUserAvatarJsonPathTitle            = "plugin.basic_connector.backend.config.user_avatar_json_path.title"
 	ConfigUserAvatarJsonPathDescription      = "plugin.basic_connector.backend.config.user_avatar_json_path.description"
 	ConfigCheckEmailVerifiedTitle            = "plugin.basic_connector.backend.config.check_email_verified.title"

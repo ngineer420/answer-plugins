@@ -76,6 +76,11 @@ plugin:
             other: 用户电子邮件JSON路径
           description:
             other: "OAuth2用户JSON中用户电子邮件的路径。例如：user.email"
+        pseudonym_prefix:
+          title:
+            other: 匿名前缀
+          description:
+            other: "仅当用户名和显示名称路径未映射时使用，以避免公开第三方账号的真实姓名。将生成类似 'grower-a4f2c1' 的用户名。默认为 'user'。"
         user_avatar_json_path:
           title:
             other: 用户头像JSON路径

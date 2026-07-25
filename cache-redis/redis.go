@@ -25,12 +25,13 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
-	"github.com/apache/answer-plugins/cache-redis/i18n"
 	"github.com/apache/answer-plugins/util"
 	"github.com/apache/answer/plugin"
 	"github.com/go-redis/redis/v8"
+	"github.com/ngineer420/answer-plugins/cache-redis/i18n"
 )
 
 var (
@@ -183,10 +184,51 @@ func (c *Cache) ConfigReceiver(config []byte) error {
 	_ = json.Unmarshal(config, conf)
 	c.Config = conf
 
-	c.RedisClient = redis.NewClient(&redis.Options{
-		Addr:     conf.Endpoint,
+	opts, err := buildRedisOptions(conf)
+	if err != nil {
+		return err
+	}
+	c.RedisClient = redis.NewClient(opts)
+	return nil
+}
+
+// buildRedisOptions turns the configured endpoint into go-redis options.
+//
+// A URL endpoint (redis:// or rediss://) is parsed with redis.ParseURL, which
+// understands TLS, credentials and the database number. This is what makes
+// managed Redis usable: providers such as Upstash, Aiven and Redis Cloud are
+// TLS-only, and the previous code built redis.Options directly with no
+// TLSConfig, so it could only ever speak plaintext.
+//
+// That mattered beyond general hygiene. Apache Answer stores login sessions in
+// the cache (internal/repo/auth writes them via data.Cache), so a plaintext
+// connection would expose session tokens in transit -- meaning the only way to
+// use a hosted cache was to leak the thing that authenticates your users.
+//
+// Anything that is not a URL is still treated as a bare host:port, so existing
+// configurations keep working unchanged.
+func buildRedisOptions(conf *CacheConfig) (*redis.Options, error) {
+	endpoint := strings.TrimSpace(conf.Endpoint)
+
+	if strings.HasPrefix(endpoint, "redis://") || strings.HasPrefix(endpoint, "rediss://") {
+		opts, err := redis.ParseURL(endpoint)
+		if err != nil {
+			return nil, fmt.Errorf("parse redis endpoint: %w", err)
+		}
+		// The separate username/password fields still win when set, so a URL
+		// can be combined with credentials entered in the admin UI.
+		if conf.Username != "" {
+			opts.Username = conf.Username
+		}
+		if conf.Password != "" {
+			opts.Password = conf.Password
+		}
+		return opts, nil
+	}
+
+	return &redis.Options{
+		Addr:     endpoint,
 		Username: conf.Username,
 		Password: conf.Password,
-	})
-	return nil
+	}, nil
 }
